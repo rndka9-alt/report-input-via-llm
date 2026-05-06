@@ -1,117 +1,74 @@
-# Module Structure Guide
+# Project Agent Guide
 
 ## Goal
 
-- Keep module boundaries explicit.
-- Make public APIs small and obvious.
-- Hide internal implementation details.
-- Refactor structure without breaking callers.
+- Keep this project easy to grow from an empty starting point.
+- Prefer simple structure until real ownership boundaries appear.
+- Make public APIs intentional when modules become large enough to need them.
+- Avoid importing domain assumptions from other projects.
 
-## Shared Rules
+## General Rules
 
-1. A module is a directory by default.
-2. A single-file module is allowed only when the code is still very small and has no meaningful internal structure.
-3. External code must import only through the module's public entry:
-   - `index.ts`
-   - `index.tsx`
-   - or the single-file module itself
-4. `index.ts` and `index.tsx` are re-export only. Do not put runtime logic in them.
-5. Do not use `export *` in module entry files. Re-export only the functions, types, and components that are intentionally public.
-6. Keep implementation details private. Code outside a module must not import its internal files directly.
-7. Inside the same parent module, sibling submodules may import each other only through each sibling's public entry.
-8. Do not import another submodule's internal files directly, even from inside the same parent module.
-9. Split code by responsibility. Do not force one function per file, but split when a file starts carrying multiple responsibilities.
-10. Types, constants, and small helpers should stay near the code that owns them until real reuse appears.
-11. Avoid vague names such as `common`, `misc`, or `helper`.
-12. Keep module dependencies directional. Avoid circular imports between sibling modules.
+1. Start with the smallest structure that clearly supports the current code.
+2. Add folders only when they clarify ownership, responsibility, or reuse.
+3. Keep related types, constants, and small helpers near the code that owns them until reuse is real.
+4. Avoid vague names such as `common`, `misc`, or `helper`.
+5. Prefer responsibility-oriented names over technical buckets when a clear domain exists.
+6. Keep dependencies directional. Avoid circular imports between modules.
+7. Do not add abstractions for symmetry alone.
+8. Preserve existing project patterns once they exist.
 
-## Renderer Rules
+## Module Boundaries
 
-Use ownership and UI responsibility as the main grouping rule.
-
-- Prefer feature-oriented names such as `tabs`, `status-panel`, `visual-asset-manager`, `dialog`, or `tab-bar`.
-- Small hooks that are private to one UI module should stay under that module, for example `tab-bar/_hooks`.
-- Form- or usage-oriented folders such as `hooks`, `components`, and `utils` should be visually marked with an underscore prefix:
-  - `_hooks`
-  - `_components`
-  - `_utils`
-- `model`, `types`, `constants`, and `internal` are valid as secondary structure inside a renderer module when they improve clarity.
-- Do not promote every small custom hook into a standalone top-level module just because it has a name.
-
-## Main And Shared Rules
-
-Use domain or service responsibility as the main grouping rule.
-
-- Prefer names such as `session`, `runtime`, `claude-mcp`, `diagnostics`, `platform`, `status`, or `window`.
-- Do not use `utils`, `types`, or `constants` as the primary top-level split when the code can first be grouped by responsibility.
-- `_utils` is secondary structure inside a responsibility-focused module when technical helpers need to be grouped by usage or form.
-- `types`, `constants`, and `internal` are secondary structure inside a responsibility-focused module.
-
-Good:
-
-```text
-terminal/
-  claude-mcp/
-  session/
-  runtime/
-```
-
-Bad:
-
-```text
-terminal/
-  utils/
-  types/
-  constants/
-```
-
-Good:
-
-```text
-tab-bar/
-  index.ts
-  TabBar.tsx
-  _hooks/
-```
+- A single file is fine while the implementation is small.
+- Promote a file into a directory when it gains meaningful internal structure.
+- If a directory becomes a module, expose its public API through an entry file such as `index.ts` or `index.tsx`.
+- Entry files should only re-export intentional public symbols.
+- Do not use `export *` in module entry files.
+- Code outside a module should not import that module's private implementation files.
+- Sibling modules should import each other through public entry points.
 
 ## Promotion Rules
 
-Promote a folder into its own submodule when several of these become true:
+Promote a folder into its own module when several of these are true:
 
 - It has a clear responsibility that can be named.
-- It keeps growing beyond a few files.
-- It starts needing its own `types`, `hooks`, `utils`, `model`, or `internal`.
-- Other files begin to rely on it through an obvious entry point.
-- Its internal imports become denser than its connection to the rest of the parent module.
+- It is growing beyond a few files.
+- Other code relies on it through an obvious API.
+- Its internal imports are denser than its connection to surrounding code.
+- It needs its own types, model, hooks, components, or internal helpers.
 
-A submodule may be:
+## Type Safety
 
-- public to the app
-- private to its parent module
+- Do not use type assertions such as `as`, non-null assertions such as `!`, or double assertions just to silence compile errors.
+- Prefer type guards, null checks, discriminated unions, and control-flow narrowing.
+- Validate values at runtime boundaries instead of asserting deeper in the code path.
 
-If it is large enough to deserve structure, give it its own entry point even when it stays private.
+## Comments
 
-## Testing Rules
+- Explain why code exists when the reason is not obvious.
+- Do not write comments that merely repeat what the code does.
 
-- Prefer tests that assert behavior through a module's public API.
-- Internal tests are allowed for complex pure logic, branch-heavy transforms, or regression-prone logic.
+```ts
+// Good: iOS Safari includes the address bar in 100vh, so dvh avoids cropped layouts.
+const height = '100dvh'
+
+// Bad: Set the height to 100dvh.
+const height = '100dvh'
+```
+
+## Testing And Verification
+
+- Prefer tests that assert behavior through public APIs.
+- Internal tests are acceptable for complex pure logic, branch-heavy transforms, or regression-prone behavior.
 - Do not couple tests to file layout unless there is a strong reason.
-
-## Type Safety Rules
-
-- Do not use type assertions such as `as`, non-null assertions such as `!`, or double assertions to silence compile errors.
-- Prefer type guards, null checks, discriminated unions, and control-flow narrowing to prove types to TypeScript.
-- If a runtime boundary requires validation, validate the value at the boundary instead of asserting deeper in the code path.
-
-## Verification And Reporting
-
-- After making changes, run `pnpm test` to verify both type errors and tests before reporting completion.
-- If `pnpm test` cannot be run, or if it fails, report that clearly instead of implying the work is fully verified.
-- If you discover type errors, test failures, or worktree changes that were not caused by the current session's work, report them to the user explicitly.
-- Do not silently overwrite, revert, or "clean up" unrelated changes just to make the current task pass.
+- After code changes, run the project's test command when one exists.
+- If no test command exists, report that verification was limited by the current project setup.
+- Do not overwrite, revert, or clean up unrelated worktree changes.
 
 ## Refactoring Standard
 
-- Create structure only when it improves boundaries and ownership.
-- Do not add folder depth just for symmetry.
-- Optimize for clear imports, clear ownership, and low-friction refactoring.
+- Refactor only when it improves clarity, ownership, or future change safety.
+- Keep edits scoped to the requested work.
+- Avoid adding folder depth just for symmetry.
+- Optimize for clear imports, clear ownership, and low-friction future changes.
