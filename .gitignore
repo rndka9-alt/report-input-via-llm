@@ -1,4 +1,6 @@
 dist/
 node_modules/
-prompts.local/
-reports/
+
+# Runtime/local external assets. Commit examples and shared suite/schema files instead.
+external/prompts/local/
+external/reports/

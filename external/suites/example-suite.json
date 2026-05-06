@@ -2,14 +2,14 @@
   "suiteId": "example-validator-suite",
   "suiteVersion": "0.1.0",
   "defaults": {
-    "systemPromptPath": "../prompts.example/system.md",
-    "schemaPath": "../schemas.example/example-report-schema.ts"
+    "systemPromptPath": "../prompts/example/system.md",
+    "schemaPath": "../schemas/example-report-schema.ts"
   },
   "testcases": [
     {
       "id": "case_001",
       "category": "summary_quality",
-      "rulePromptPath": "../prompts.example/rules/summary-quality.md",
+      "rulePromptPath": "../prompts/example/rules/summary-quality.md",
       "input": {
         "source": "Original text here",
         "output": "Model generated summary here"

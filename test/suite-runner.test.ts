@@ -12,7 +12,7 @@ import {
 describe("runReportSuiteViaLLM", () => {
   it("runs JSON suite cases through reportInputViaLLM and writes artifacts", async () => {
     const fixture = await createSuiteFixture({
-      caseRulePromptPath: "./prompts.local/rules/quality.md",
+      caseRulePromptPath: "./external/prompts/local/rules/quality.md",
     });
     const calls: LLMMessage[][] = [];
     const model: ChatModel = {
@@ -89,7 +89,7 @@ describe("runReportSuiteViaLLM", () => {
 
   it("records individual testcase errors by default", async () => {
     const fixture = await createSuiteFixture({
-      caseRulePromptPath: "./prompts.local/rules/missing.md",
+      caseRulePromptPath: "./external/prompts/local/rules/missing.md",
     });
     const model: ChatModel = {
       async chat() {
@@ -126,7 +126,7 @@ describe("runReportSuiteViaLLM", () => {
 
   it("throws individual testcase errors when configured", async () => {
     const fixture = await createSuiteFixture({
-      caseRulePromptPath: "./prompts.local/rules/missing.md",
+      caseRulePromptPath: "./external/prompts/local/rules/missing.md",
     });
     const model: ChatModel = {
       async chat() {
@@ -165,17 +165,17 @@ async function createSuiteFixture(input: {
   suitePath: string;
 }> {
   const root = await mkdtemp(join(tmpdir(), "report-suite-"));
-  await mkdir(join(root, "prompts.local", "rules"), { recursive: true });
-  await mkdir(join(root, "schemas"), { recursive: true });
-  await mkdir(join(root, "reports"), { recursive: true });
-  await writeFile(join(root, "prompts.local", "system.md"), "System prompt", "utf8");
+  await mkdir(join(root, "external", "prompts", "local", "rules"), { recursive: true });
+  await mkdir(join(root, "external", "schemas"), { recursive: true });
+  await mkdir(join(root, "external", "reports"), { recursive: true });
+  await writeFile(join(root, "external", "prompts", "local", "system.md"), "System prompt", "utf8");
   await writeFile(
-    join(root, "prompts.local", "rules", "quality.md"),
+    join(root, "external", "prompts", "local", "rules", "quality.md"),
     "Judge summary quality",
     "utf8",
   );
   await writeFile(
-    join(root, "schemas", "example-report-schema.ts"),
+    join(root, "external", "schemas", "example-report-schema.ts"),
     [
       'import { z } from "zod";',
       "",
@@ -197,8 +197,8 @@ async function createSuiteFixture(input: {
         suiteId: "example-validator-suite",
         suiteVersion: "0.1.0",
         defaults: {
-          systemPromptPath: "./prompts.local/system.md",
-          schemaPath: "./schemas/example-report-schema.ts",
+          systemPromptPath: "./external/prompts/local/system.md",
+          schemaPath: "./external/schemas/example-report-schema.ts",
         },
         testcases: [
           {
@@ -222,7 +222,7 @@ async function createSuiteFixture(input: {
   );
 
   return {
-    outputRoot: join(root, "reports"),
+    outputRoot: join(root, "external", "reports"),
     suitePath,
   };
 }

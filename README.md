@@ -113,8 +113,8 @@ const model = new OpenAIContainer({
   model: "your-model-name",
 });
 
-const result = await runReportSuiteViaLLM(model, "./suites.example/example-suite.json", {
-  outputDir: "./reports",
+const result = await runReportSuiteViaLLM(model, "./external/suites/example-suite.json", {
+  outputDir: "./external/reports",
   onCaseError: "record-and-continue",
 });
 
@@ -128,14 +128,14 @@ Suite files are JSON and reference prompt/rule/schema paths:
   "suiteId": "example-validator-suite",
   "suiteVersion": "0.1.0",
   "defaults": {
-    "systemPromptPath": "./prompts.local/system.md",
-    "schemaPath": "./schemas/example-report-schema.ts"
+    "systemPromptPath": "../prompts/local/system.md",
+    "schemaPath": "../schemas/example-report-schema.ts"
   },
   "testcases": [
     {
       "id": "case_001",
       "category": "summary_quality",
-      "rulePromptPath": "./prompts.local/rules/summary-quality.md",
+      "rulePromptPath": "../prompts/local/rules/summary-quality.md",
       "input": {
         "source": "Original text here",
         "output": "Model generated summary here"
@@ -169,5 +169,17 @@ cases/{caseId}.json
 failures.jsonl
 ```
 
-Real prompt files can live under `prompts.local/`, which is gitignored. The committed
-`prompts.example/` files are templates only.
+External prompt, schema, suite, and report files live under `external/`:
+
+```txt
+external/
+  prompts/
+    example/
+    local/
+  schemas/
+  suites/
+  reports/
+```
+
+Real prompt files can live under `external/prompts/local/`, which is gitignored.
+The committed `external/prompts/example/` files are templates only.
