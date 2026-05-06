@@ -12,6 +12,7 @@ export {
 } from "./core.js";
 export { OpenAIContainer } from "./apiContainer/openai-container.js";
 export { type OpenAIContainerFormat } from "./apiContainer/openai-container.js";
+export { AnthropicContainer, type AnthropicContainerFormat } from "./apiContainer/anthropic-container.js";
 export {
   type OllamaCloudContainerFormat,
   OllamaCloudContainer,
@@ -24,6 +25,10 @@ export {
   OpenAICompatibleFormat,
   type OpenAICompatibleFormatOptions,
 } from "./apiContainer/formats/openai-compatible-format.js";
+export {
+  AnthropicMessagesAPIFormat,
+  type AnthropicMessagesAPIFormatOptions,
+} from "./apiContainer/formats/anthropic-messages-api-format.js";
 export {
   OpenAIResponsesAPIFormat,
   type OpenAIResponsesAPIFormatOptions,

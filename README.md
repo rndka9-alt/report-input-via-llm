@@ -120,6 +120,20 @@ const model = new OllamaCloudContainer({
 });
 ```
 
+For Anthropic:
+
+```ts
+import { AnthropicContainer, AnthropicMessagesAPIFormat } from "report-input-via-llm";
+
+const model = new AnthropicContainer({
+  apiKey: process.env.ANTHROPIC_API_KEY,
+  format: new AnthropicMessagesAPIFormat({
+    maxTokens: 1024,
+    model: "claude-opus-4-1-20250805",
+  }),
+});
+```
+
 For Vercel AI Gateway:
 
 ```ts
@@ -149,8 +163,10 @@ src/apiContainer/
     openai-compatible-format.ts
     openai-responses-api-format.ts
     ollama-chat-format.ts
+    anthropic-messages-api-format.ts
   openai-container.ts
   ollama-cloud-container.ts
+  anthropic-container.ts
   vercel-ai-gateway-container.ts
 ```
 
