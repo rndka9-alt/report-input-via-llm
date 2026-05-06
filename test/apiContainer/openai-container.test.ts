@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
+  OpenAICompatibleFormat,
   OpenAIContainer,
   ReportInputViaLLMError,
   type FetchLike,
-  type LLMFormat,
 } from "../../src/index.js";
 
 describe("OpenAIContainer", () => {
@@ -37,8 +37,10 @@ describe("OpenAIContainer", () => {
       apiKey: "test-key",
       baseUrl: "https://llm.example.test/v1",
       fetch: fetchImplementation,
-      model: "test-model",
-      temperature: 0,
+      format: new OpenAICompatibleFormat({
+        model: "test-model",
+        temperature: 0,
+      }),
     });
 
     const output = await model.chat([
@@ -98,7 +100,9 @@ describe("OpenAIContainer", () => {
     });
     const model = new OpenAIContainer({
       fetch: fetchImplementation,
-      model: "test-model",
+      format: new OpenAICompatibleFormat({
+        model: "test-model",
+      }),
     });
 
     await expect(model.chat([])).rejects.toThrow(
@@ -126,26 +130,15 @@ describe("OpenAIContainer", () => {
     });
     const model = new OpenAIContainer({
       fetch: fetchImplementation,
-      model: "test-model",
+      format: new OpenAICompatibleFormat({
+        model: "test-model",
+      }),
     });
 
     await expect(model.chat([])).rejects.toThrow(ReportInputViaLLMError);
   });
 
-  it("accepts a custom LLM format inside the API container", async () => {
-    const format: LLMFormat = {
-      createRequestBody(messages, options) {
-        return {
-          providerModel: options.model,
-          providerMessages: messages.map((message) => message.message),
-        };
-      },
-      parseResponse(responseJson) {
-        return {
-          outputContent: JSON.stringify(responseJson),
-        };
-      },
-    };
+  it("keeps model invocation options inside the injected format", async () => {
     const calls: unknown[] = [];
     const fetchImplementation: FetchLike = async (input, init) => {
       calls.push({ input, init });
@@ -156,7 +149,13 @@ describe("OpenAIContainer", () => {
         statusText: "OK",
         async json() {
           return {
-            custom: true,
+            choices: [
+              {
+                message: {
+                  content: "{\"custom\":true}",
+                },
+              },
+            ],
           };
         },
         async text() {
@@ -166,8 +165,10 @@ describe("OpenAIContainer", () => {
     };
     const model = new OpenAIContainer({
       fetch: fetchImplementation,
-      format,
-      model: "test-model",
+      format: new OpenAICompatibleFormat({
+        maxTokens: 64,
+        model: "test-model",
+      }),
     });
 
     const output = await model.chat([
@@ -183,8 +184,17 @@ describe("OpenAIContainer", () => {
         input: "https://api.openai.com/v1/chat/completions",
         init: {
           body: JSON.stringify({
-            providerModel: "test-model",
-            providerMessages: ["hello"],
+            model: "test-model",
+            messages: [
+              {
+                role: "user",
+                content: "hello",
+              },
+            ],
+            response_format: {
+              type: "json_object",
+            },
+            max_tokens: 64,
           }),
           headers: {
             "content-type": "application/json",

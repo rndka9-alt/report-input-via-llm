@@ -73,11 +73,13 @@ API containers are the public model implementations. They own provider concerns 
 base URLs, headers, authentication, and request execution.
 
 ```ts
-import { OpenAIContainer } from "report-input-via-llm";
+import { OpenAICompatibleFormat, OpenAIContainer } from "report-input-via-llm";
 
 const model = new OpenAIContainer({
   apiKey: process.env.OPENAI_API_KEY,
-  model: "your-model-name",
+  format: new OpenAICompatibleFormat({
+    model: "your-model-name",
+  }),
 });
 ```
 
@@ -86,17 +88,70 @@ For local or proxy servers:
 ```ts
 const model = new OpenAIContainer({
   baseUrl: "http://localhost:4000/v1",
-  model: "local-model",
+  format: new OpenAICompatibleFormat({
+    model: "local-model",
+  }),
 });
 ```
 
-Internally, API containers contain an LLM format implementation.
+For the OpenAI Responses API:
+
+```ts
+import { OpenAIContainer, OpenAIResponsesAPIFormat } from "report-input-via-llm";
+
+const model = new OpenAIContainer({
+  apiKey: process.env.OPENAI_API_KEY,
+  format: new OpenAIResponsesAPIFormat({
+    model: "your-model-name",
+  }),
+});
+```
+
+For Ollama Cloud:
+
+```ts
+import { OllamaChatFormat, OllamaCloudContainer, ollamaCloudDeepSeekModels } from "report-input-via-llm";
+
+const model = new OllamaCloudContainer({
+  apiKey: process.env.OLLAMA_API_KEY,
+  format: new OllamaChatFormat({
+    model: ollamaCloudDeepSeekModels.deepseekV4Flash,
+  }),
+});
+```
+
+For Vercel AI Gateway:
+
+```ts
+import { OpenAICompatibleFormat, VercelAIGatewayContainer } from "report-input-via-llm";
+
+const model = new VercelAIGatewayContainer({
+  apiKey: process.env.AI_GATEWAY_API_KEY,
+  format: new OpenAICompatibleFormat({
+    model: "openai/your-model-name",
+  }),
+  providerOptions: {
+    openai: {
+      reasoningEffort: "low",
+    },
+  },
+});
+```
+
+API containers require an explicit LLM format instance.
+Model invocation options such as `model`, `temperature`, and `maxTokens` belong to
+the format. Provider transport options such as `apiKey`, `headers`, `baseUrl`, and
+gateway-specific `providerOptions` belong to the container.
 
 ```txt
 src/apiContainer/
   formats/
     openai-compatible-format.ts
+    openai-responses-api-format.ts
+    ollama-chat-format.ts
   openai-container.ts
+  ollama-cloud-container.ts
+  vercel-ai-gateway-container.ts
 ```
 
 Formats own provider payload parsing and body creation. Containers own API provider details.
@@ -106,11 +161,13 @@ Formats own provider payload parsing and body creation. Containers own API provi
 `runReportSuiteViaLLM` runs a JSON testcase suite through `reportInputViaLLM`.
 
 ```ts
-import { OpenAIContainer, runReportSuiteViaLLM } from "report-input-via-llm";
+import { OpenAICompatibleFormat, OpenAIContainer, runReportSuiteViaLLM } from "report-input-via-llm";
 
 const model = new OpenAIContainer({
   apiKey: process.env.OPENAI_API_KEY,
-  model: "your-model-name",
+  format: new OpenAICompatibleFormat({
+    model: "your-model-name",
+  }),
 });
 
 const result = await runReportSuiteViaLLM(model, "./external/suites/example-suite.json", {

@@ -1,28 +1,28 @@
 import { ReportInputViaLLMError, type ChatModel, type LLMMessage, type LLMOutput } from "../core.js";
 import type { FetchLike } from "./fetch-like.js";
-import type { OpenAICompatibleFormat } from "./formats/openai-compatible-format.js";
-import type { OpenAIResponsesAPIFormat } from "./formats/openai-responses-api-format.js";
+import type { LLMFormat } from "./llm-format.js";
+import type { OllamaChatFormat } from "./formats/ollama-chat-format.js";
 
-export type OpenAIContainerFormat = OpenAICompatibleFormat | OpenAIResponsesAPIFormat;
+export type OllamaCloudContainerFormat = OllamaChatFormat;
 
-export interface OpenAIContainerOptions {
+export interface OllamaCloudContainerOptions {
   apiKey?: string;
   baseUrl?: string;
   fetch?: FetchLike;
-  format: OpenAIContainerFormat;
+  format: OllamaCloudContainerFormat;
   headers?: Record<string, string>;
   timeoutMs?: number;
 }
 
-export class OpenAIContainer implements ChatModel {
+export class OllamaCloudContainer implements ChatModel {
   private readonly apiKey: string | undefined;
   private readonly baseUrl: string;
   private readonly fetchImplementation: FetchLike;
-  private readonly format: OpenAIContainerFormat;
+  private readonly format: LLMFormat;
   private readonly headers: Record<string, string>;
   private readonly timeoutMs: number | undefined;
 
-  constructor(options: OpenAIContainerOptions) {
+  constructor(options: OllamaCloudContainerOptions) {
     if (options.apiKey !== undefined) {
       ensureNonEmptyString(options.apiKey, "options.apiKey");
     }
@@ -32,7 +32,7 @@ export class OpenAIContainer implements ChatModel {
     }
 
     this.apiKey = options.apiKey;
-    this.baseUrl = options.baseUrl ?? "https://api.openai.com/v1";
+    this.baseUrl = options.baseUrl ?? "https://ollama.com/api";
     this.fetchImplementation = options.fetch ?? fetch;
     this.format = options.format;
     this.headers = options.headers ?? {};
@@ -45,13 +45,13 @@ export class OpenAIContainer implements ChatModel {
 
     try {
       const response = await this.fetchImplementation(
-        `${this.baseUrl}${this.format.requestPath ?? "/chat/completions"}`,
+        `${this.baseUrl}${this.format.requestPath ?? "/chat"}`,
         requestInit,
       );
 
       if (!response.ok) {
         throw new ReportInputViaLLMError(
-          `OpenAI API request failed. status=${response.status} ${response.statusText}, body=${await response.text()}`,
+          `Ollama Cloud API request failed. status=${response.status} ${response.statusText}, body=${await response.text()}`,
         );
       }
 
@@ -73,7 +73,9 @@ export class OpenAIContainer implements ChatModel {
     signal?: AbortSignal;
   } {
     const requestInit = {
-      body: JSON.stringify(this.createRequestBody(messages)),
+      body: JSON.stringify(
+        this.format.createRequestBody(messages),
+      ),
       headers: this.createHeaders(),
       method: "POST",
     };
@@ -101,10 +103,6 @@ export class OpenAIContainer implements ChatModel {
     return headers;
   }
 
-  protected createRequestBody(messages: readonly LLMMessage[]): Record<string, unknown> {
-    return this.format.createRequestBody(messages);
-  }
-
   private createAbortController(): TimedAbortController | undefined {
     if (this.timeoutMs === undefined) {
       return undefined;
@@ -120,6 +118,7 @@ export class OpenAIContainer implements ChatModel {
       timeoutId,
     };
   }
+
 }
 
 interface TimedAbortController {

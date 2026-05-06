@@ -1,6 +1,12 @@
 import { z } from "zod";
 import { ReportInputViaLLMError, type LLMMessage, type LLMOutput } from "../../core.js";
-import type { LLMFormat, LLMFormatRequestOptions } from "../llm-format.js";
+import type { LLMFormat } from "../llm-format.js";
+
+export interface OpenAICompatibleFormatOptions {
+  maxTokens?: number;
+  model: string;
+  temperature?: number;
+}
 
 const chatCompletionResponseSchema = z
   .object({
@@ -22,12 +28,22 @@ const chatCompletionResponseSchema = z
   .passthrough();
 
 export class OpenAICompatibleFormat implements LLMFormat {
-  createRequestBody(
-    messages: readonly LLMMessage[],
-    options: LLMFormatRequestOptions,
-  ): Record<string, unknown> {
+  readonly requestPath = "/chat/completions";
+  private readonly maxTokens: number | undefined;
+  private readonly model: string;
+  private readonly temperature: number | undefined;
+
+  constructor(options: OpenAICompatibleFormatOptions) {
+    ensureNonEmptyString(options.model, "options.model");
+
+    this.maxTokens = options.maxTokens;
+    this.model = options.model;
+    this.temperature = options.temperature;
+  }
+
+  createRequestBody(messages: readonly LLMMessage[]): Record<string, unknown> {
     const requestBody: Record<string, unknown> = {
-      model: options.model,
+      model: this.model,
       messages: messages.map((message) => ({
         role: message.role,
         content: message.message,
@@ -37,12 +53,12 @@ export class OpenAICompatibleFormat implements LLMFormat {
       },
     };
 
-    if (options.maxTokens !== undefined) {
-      requestBody.max_tokens = options.maxTokens;
+    if (this.maxTokens !== undefined) {
+      requestBody.max_tokens = this.maxTokens;
     }
 
-    if (options.temperature !== undefined) {
-      requestBody.temperature = options.temperature;
+    if (this.temperature !== undefined) {
+      requestBody.temperature = this.temperature;
     }
 
     return requestBody;
@@ -78,5 +94,11 @@ export class OpenAICompatibleFormat implements LLMFormat {
       reasoningContent,
       raw: responseJson,
     };
+  }
+}
+
+function ensureNonEmptyString(value: string, path: string): void {
+  if (value.trim().length === 0) {
+    throw new ReportInputViaLLMError(`${path} must be a non-empty string.`);
   }
 }
