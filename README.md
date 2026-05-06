@@ -100,3 +100,74 @@ src/apiContainer/
 ```
 
 Formats own provider payload parsing and body creation. Containers own API provider details.
+
+## Suite Runner
+
+`runReportSuiteViaLLM` runs a JSON testcase suite through `reportInputViaLLM`.
+
+```ts
+import { OpenAIContainer, runReportSuiteViaLLM } from "report-input-via-llm";
+
+const model = new OpenAIContainer({
+  apiKey: process.env.OPENAI_API_KEY,
+  model: "your-model-name",
+});
+
+const result = await runReportSuiteViaLLM(model, "./suites.example/example-suite.json", {
+  outputDir: "./reports",
+  onCaseError: "record-and-continue",
+});
+
+console.log(result.summary);
+```
+
+Suite files are JSON and reference prompt/rule/schema paths:
+
+```json
+{
+  "suiteId": "example-validator-suite",
+  "suiteVersion": "0.1.0",
+  "defaults": {
+    "systemPromptPath": "./prompts.local/system.md",
+    "schemaPath": "./schemas/example-report-schema.ts"
+  },
+  "testcases": [
+    {
+      "id": "case_001",
+      "category": "summary_quality",
+      "rulePromptPath": "./prompts.local/rules/summary-quality.md",
+      "input": {
+        "source": "Original text here",
+        "output": "Model generated summary here"
+      },
+      "meta": {
+        "tags": ["mvp"]
+      }
+    }
+  ]
+}
+```
+
+Schema files are TypeScript modules exporting `schema` or a default Zod schema:
+
+```ts
+import { z } from "zod";
+
+export const schema = z.object({
+  finalLabel: z.string(),
+  confidence: z.number(),
+  summary: z.string(),
+});
+```
+
+When `outputDir` is provided, artifacts are written under `{outputDir}/{runId}`:
+
+```txt
+manifest.json
+summary.json
+cases/{caseId}.json
+failures.jsonl
+```
+
+Real prompt files can live under `prompts.local/`, which is gitignored. The committed
+`prompts.example/` files are templates only.
