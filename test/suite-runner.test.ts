@@ -2,14 +2,111 @@ import { mkdtemp, mkdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
+import { z } from "zod";
 import {
   ReportInputViaLLMError,
+  runReportSuiteFileViaLLM,
   runReportSuiteViaLLM,
   type ChatModel,
   type LLMMessage,
 } from "../src/index.js";
 
 describe("runReportSuiteViaLLM", () => {
+  it("runs multiple loaded suite testcases through reportInputViaLLM", async () => {
+    const calls: LLMMessage[][] = [];
+    const model: ChatModel = {
+      async chat(messages) {
+        calls.push([...messages]);
+
+        return {
+          outputContent: JSON.stringify({
+            finalLabel: "pass",
+            confidence: calls.length === 1 ? 0.9 : 0.8,
+            summary: `Case ${calls.length} looks valid`,
+          }),
+        };
+      },
+    };
+    const validator = {
+      systemPrompt: "System prompt",
+      judgmentPrompt: "Judge summary quality",
+      schema: z.object({
+        finalLabel: z.string(),
+        confidence: z.number(),
+        summary: z.string(),
+      }),
+    };
+
+    const result = await runReportSuiteViaLLM(
+      model,
+      {
+        suiteId: "loaded-summary-suite",
+        suiteVersion: "0.1.0",
+        testcases: [
+          {
+            id: "case_001",
+            category: "summary_quality",
+            input: {
+              source: "Original text here",
+              output: "Model generated summary here",
+            },
+            meta: {
+              tags: ["mvp"],
+            },
+            validator,
+          },
+          {
+            id: "case_002",
+            category: "summary_quality",
+            input: {
+              source: "Second original text here",
+              output: "Second model generated summary here",
+            },
+            validator,
+          },
+        ],
+      },
+      {
+        runId: "run_loaded_test",
+      },
+    );
+
+    expect(result.summary).toEqual({
+      total: 2,
+      success: 2,
+      failed: 0,
+      byCategory: {
+        summary_quality: {
+          total: 2,
+          success: 2,
+          failed: 0,
+        },
+      },
+    });
+    expect(result.cases).toHaveLength(2);
+    expect(result.cases[0]).toMatchObject({
+      caseId: "case_001",
+      status: "success",
+      result: {
+        finalLabel: "pass",
+        confidence: 0.9,
+        summary: "Case 1 looks valid",
+      },
+    });
+    expect(result.cases[1]).toMatchObject({
+      caseId: "case_002",
+      status: "success",
+      result: {
+        finalLabel: "pass",
+        confidence: 0.8,
+        summary: "Case 2 looks valid",
+      },
+    });
+    expect(calls).toHaveLength(2);
+    expect(calls[0]?.[0]?.message).toContain("System prompt");
+    expect(calls[0]?.[1]?.message).toContain("Judge summary quality");
+  });
+
   it("runs JSON suite cases through reportInputViaLLM and writes artifacts", async () => {
     const fixture = await createSuiteFixture({
       caseRulePromptPath: "./external/prompts/local/rules/quality.md",
@@ -29,7 +126,7 @@ describe("runReportSuiteViaLLM", () => {
       },
     };
 
-    const result = await runReportSuiteViaLLM(model, fixture.suitePath, {
+    const result = await runReportSuiteFileViaLLM(model, fixture.suitePath, {
       outputDir: fixture.outputRoot,
       runId: "run_test",
     });
@@ -99,7 +196,7 @@ describe("runReportSuiteViaLLM", () => {
       },
     };
 
-    const result = await runReportSuiteViaLLM(model, fixture.suitePath, {
+    const result = await runReportSuiteFileViaLLM(model, fixture.suitePath, {
       runId: "run_test",
     });
 
@@ -137,7 +234,7 @@ describe("runReportSuiteViaLLM", () => {
     };
 
     await expect(
-      runReportSuiteViaLLM(model, fixture.suitePath, {
+      runReportSuiteFileViaLLM(model, fixture.suitePath, {
         onCaseError: "throw",
       }),
     ).rejects.toThrow(ReportInputViaLLMError);
@@ -152,7 +249,7 @@ describe("runReportSuiteViaLLM", () => {
       },
     };
 
-    await expect(runReportSuiteViaLLM(model, "/missing/suite.json")).rejects.toThrow(
+    await expect(runReportSuiteFileViaLLM(model, "/missing/suite.json")).rejects.toThrow(
       ReportInputViaLLMError,
     );
   });

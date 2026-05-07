@@ -41,12 +41,16 @@ export {
 } from "./apiContainer/formats/ollama-chat-format.js";
 export {
   createRules,
+  runReportSuiteFileViaLLM,
   runReportSuiteViaLLM,
   type ReportCaseError,
   type ReportCaseErrorPhase,
   type ReportCaseResult,
+  type ReportSuite,
+  type ReportSuiteTestcase,
   type ReportSuiteRunResult,
   type ReportSuiteSummary,
   type ReportSuiteSummaryCategory,
+  type ReportSuiteValidator,
   type RunReportSuiteViaLLMOptions,
 } from "./suite-runner.js";

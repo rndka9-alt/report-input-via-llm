@@ -57,6 +57,26 @@ export interface ReportSuiteRunResult {
   cases: ReportCaseResult[];
 }
 
+export interface ReportSuiteValidator {
+  systemPrompt: string;
+  judgmentPrompt: string;
+  schema: z.ZodType<Record<string, unknown>>;
+}
+
+export interface ReportSuiteTestcase {
+  id: string;
+  category: string;
+  input: unknown;
+  validator: ReportSuiteValidator;
+  meta?: Record<string, unknown>;
+}
+
+export interface ReportSuite {
+  suiteId: string;
+  suiteVersion?: string;
+  testcases: readonly ReportSuiteTestcase[];
+}
+
 export interface RunReportSuiteViaLLMOptions {
   onCaseError?: "throw" | "record-and-continue";
   outputDir?: string;
@@ -87,23 +107,26 @@ const suiteSchema = z.object({
 });
 
 type ReportSuiteFile = z.infer<typeof suiteSchema>;
-type ReportSuiteTestcase = z.infer<typeof testcaseSchema>;
+type ReportSuiteFileTestcase = z.infer<typeof testcaseSchema>;
+
+interface ReportSuiteRunMetadata {
+  suiteId: string;
+  suiteVersion?: string;
+}
 
 export async function runReportSuiteViaLLM(
   model: ChatModel,
-  suiteFilePath: string,
+  suite: ReportSuite,
   options: RunReportSuiteViaLLMOptions = {},
 ): Promise<ReportSuiteRunResult> {
   const startedAt = new Date();
   const runId = options.runId ?? createRunId(startedAt);
-  const suitePath = resolve(suiteFilePath);
-  const suite = await loadSuite(suitePath);
-  const suiteDirectory = dirname(suitePath);
+  validateSuite(suite);
   const caseResults: ReportCaseResult[] = [];
   const onCaseError = options.onCaseError ?? "record-and-continue";
 
   for (const testcase of suite.testcases) {
-    const caseResult = await runSingleCase(model, suite, testcase, suiteDirectory);
+    const caseResult = await runSingleCase(model, testcase);
 
     if (caseResult.status === "failed" && onCaseError === "throw") {
       throw new ReportInputViaLLMError(
@@ -137,11 +160,59 @@ export async function runReportSuiteViaLLM(
   return runResult;
 }
 
+export async function runReportSuiteFileViaLLM(
+  model: ChatModel,
+  suiteFilePath: string,
+  options: RunReportSuiteViaLLMOptions = {},
+): Promise<ReportSuiteRunResult> {
+  const startedAt = new Date();
+  const runId = options.runId ?? createRunId(startedAt);
+  const suitePath = resolve(suiteFilePath);
+  const suiteFile = await loadSuite(suitePath);
+  const suiteDirectory = dirname(suitePath);
+  const caseResults: ReportCaseResult[] = [];
+  const onCaseError = options.onCaseError ?? "record-and-continue";
+
+  for (const testcase of suiteFile.testcases) {
+    const caseResult = await runSingleFileCase(model, suiteFile, testcase, suiteDirectory);
+
+    if (caseResult.status === "failed" && onCaseError === "throw") {
+      throw new ReportInputViaLLMError(
+        `Report suite case failed. caseId=${caseResult.caseId}, phase=${caseResult.error?.phase}`,
+        caseResult.error,
+      );
+    }
+
+    caseResults.push(caseResult);
+  }
+
+  const completedAt = new Date();
+  const summary = createSummary(caseResults);
+  const runResult = createRunResult({
+    cases: caseResults,
+    outputDir: createRunOutputDir(options.outputDir, runId),
+    runId,
+    suite: createSuiteRunMetadata(suiteFile.suiteId, suiteFile.suiteVersion),
+    summary,
+  });
+
+  if (runResult.outputDir !== undefined) {
+    await writeArtifacts({
+      completedAt,
+      result: runResult,
+      startedAt,
+      totalCaseCount: suiteFile.testcases.length,
+    });
+  }
+
+  return runResult;
+}
+
 function createRunResult(input: {
   cases: ReportCaseResult[];
   outputDir: string | undefined;
   runId: string;
-  suite: ReportSuiteFile;
+  suite: ReportSuiteRunMetadata;
   summary: ReportSuiteSummary;
 }): ReportSuiteRunResult {
   const baseResult = {
@@ -176,6 +247,22 @@ function createRunResult(input: {
   return baseResult;
 }
 
+function createSuiteRunMetadata(
+  suiteId: string,
+  suiteVersion: string | undefined,
+): ReportSuiteRunMetadata {
+  if (suiteVersion !== undefined) {
+    return {
+      suiteId,
+      suiteVersion,
+    };
+  }
+
+  return {
+    suiteId,
+  };
+}
+
 async function loadSuite(suitePath: string): Promise<ReportSuiteFile> {
   const fileContent = await readFileForPhase(suitePath, "load_suite");
   let parsedJson: unknown;
@@ -195,36 +282,13 @@ async function loadSuite(suitePath: string): Promise<ReportSuiteFile> {
 
 async function runSingleCase(
   model: ChatModel,
-  suite: ReportSuiteFile,
   testcase: ReportSuiteTestcase,
-  suiteDirectory: string,
 ): Promise<ReportCaseResult> {
   try {
-    const systemPromptPath = resolveRequiredPath(
-      testcase.systemPromptPath,
-      suite.defaults?.systemPromptPath,
-      suiteDirectory,
-      `testcase ${testcase.id} systemPromptPath`,
-    );
-    const rulePromptPath = resolveRequiredPath(
-      testcase.rulePromptPath,
-      suite.defaults?.rulePromptPath,
-      suiteDirectory,
-      `testcase ${testcase.id} rulePromptPath`,
-    );
-    const schemaPath = resolveRequiredPath(
-      testcase.schemaPath,
-      suite.defaults?.schemaPath,
-      suiteDirectory,
-      `testcase ${testcase.id} schemaPath`,
-    );
-    const systemPrompt = await readFileForPhase(systemPromptPath, "load_prompt");
-    const judgmentPrompt = await readFileForPhase(rulePromptPath, "load_prompt");
-    const schema = await loadSchema(schemaPath);
     const rules = createRules({
-      judgmentPrompt,
-      schema,
-      systemPrompt,
+      judgmentPrompt: testcase.validator.judgmentPrompt,
+      schema: testcase.validator.schema,
+      systemPrompt: testcase.validator.systemPrompt,
     });
     const report = await reportInputViaLLM(model, rules, testcase.input);
 
@@ -246,6 +310,100 @@ async function runSingleCase(
     });
 
     return addMeta(failedResult, testcase.meta);
+  }
+}
+
+async function loadSuiteFileTestcase(
+  suite: ReportSuiteFile,
+  testcase: ReportSuiteFileTestcase,
+  suiteDirectory: string,
+): Promise<ReportSuiteTestcase> {
+  const systemPromptPath = resolveRequiredPath(
+    testcase.systemPromptPath,
+    suite.defaults?.systemPromptPath,
+    suiteDirectory,
+    `testcase ${testcase.id} systemPromptPath`,
+  );
+  const rulePromptPath = resolveRequiredPath(
+    testcase.rulePromptPath,
+    suite.defaults?.rulePromptPath,
+    suiteDirectory,
+    `testcase ${testcase.id} rulePromptPath`,
+  );
+  const schemaPath = resolveRequiredPath(
+    testcase.schemaPath,
+    suite.defaults?.schemaPath,
+    suiteDirectory,
+    `testcase ${testcase.id} schemaPath`,
+  );
+  const systemPrompt = await readFileForPhase(systemPromptPath, "load_prompt");
+  const judgmentPrompt = await readFileForPhase(rulePromptPath, "load_prompt");
+  const schema = await loadSchema(schemaPath);
+  const loadedTestcase = {
+    id: testcase.id,
+    category: testcase.category,
+    input: testcase.input,
+    validator: {
+      judgmentPrompt,
+      schema,
+      systemPrompt,
+    },
+  };
+
+  if (testcase.meta !== undefined) {
+    return {
+      ...loadedTestcase,
+      meta: testcase.meta,
+    };
+  }
+
+  return loadedTestcase;
+}
+
+async function runSingleFileCase(
+  model: ChatModel,
+  suite: ReportSuiteFile,
+  testcase: ReportSuiteFileTestcase,
+  suiteDirectory: string,
+): Promise<ReportCaseResult> {
+  try {
+    const loadedTestcase = await loadSuiteFileTestcase(suite, testcase, suiteDirectory);
+
+    return await runSingleCase(model, loadedTestcase);
+  } catch (error) {
+    const failedResult = createCaseResult({
+      caseId: testcase.id,
+      category: testcase.category,
+      error: normalizeCaseError(error),
+      status: "failed",
+    });
+
+    return addMeta(failedResult, testcase.meta);
+  }
+}
+
+function validateSuite(suite: ReportSuite): void {
+  ensureNonEmptyString(suite.suiteId, "suite.suiteId");
+
+  if (suite.suiteVersion !== undefined) {
+    ensureNonEmptyString(suite.suiteVersion, "suite.suiteVersion");
+  }
+
+  if (suite.testcases.length === 0) {
+    throw new ReportInputViaLLMError("suite.testcases must contain at least one testcase.");
+  }
+
+  for (const testcase of suite.testcases) {
+    ensureNonEmptyString(testcase.id, "testcase.id");
+    ensureNonEmptyString(testcase.category, `testcase ${testcase.id} category`);
+    ensureNonEmptyString(
+      testcase.validator.systemPrompt,
+      `testcase ${testcase.id} validator.systemPrompt`,
+    );
+    ensureNonEmptyString(
+      testcase.validator.judgmentPrompt,
+      `testcase ${testcase.id} validator.judgmentPrompt`,
+    );
   }
 }
 

@@ -174,9 +174,12 @@ Formats own provider payload parsing and body creation. Containers own API provi
 
 ## Suite Runner
 
-`runReportSuiteViaLLM` runs a JSON testcase suite through `reportInputViaLLM`.
+`runReportSuiteViaLLM` runs already-loaded testcase content through `reportInputViaLLM`.
+Callers own prompt and schema loading, so prompts can come from files, databases,
+bundles, or any other project-specific source.
 
 ```ts
+import { z } from "zod";
 import { OpenAICompatibleFormat, OpenAIContainer, runReportSuiteViaLLM } from "report-input-via-llm";
 
 const model = new OpenAIContainer({
@@ -186,13 +189,47 @@ const model = new OpenAIContainer({
   }),
 });
 
-const result = await runReportSuiteViaLLM(model, "./external/suites/example-suite.json", {
-  outputDir: "./external/reports",
-  onCaseError: "record-and-continue",
-});
+const result = await runReportSuiteViaLLM(
+  model,
+  {
+    suiteId: "summary-suite",
+    testcases: [
+      {
+        id: "case_001",
+        category: "summary_quality",
+        validator: {
+          systemPrompt: "You are a strict evaluator.",
+          judgmentPrompt: "Judge summary quality.",
+          schema: z.object({
+            finalLabel: z.string(),
+            confidence: z.number(),
+            summary: z.string(),
+          }),
+        },
+        input: {
+          source: "Original text here",
+          output: "Model generated summary here",
+        },
+        meta: {
+          tags: ["mvp"],
+        },
+      },
+    ],
+  },
+  {
+    outputDir: "./external/reports",
+    onCaseError: "record-and-continue",
+  },
+);
 
 console.log(result.summary);
 ```
+
+`testcases` is an array, so one suite can run multiple inputs and validators in
+one sequential run.
+
+`runReportSuiteFileViaLLM` is the file-backed convenience wrapper. It loads a JSON
+suite file, prompt files, and a schema module, then delegates to `runReportSuiteViaLLM`.
 
 Suite files are JSON and reference prompt/rule/schema paths:
 
