@@ -228,6 +228,9 @@ console.log(result.summary);
 `testcases` is an array, so one suite can run multiple inputs and validators in
 one sequential run.
 
+See `examples/loaded-suite.ts` for a complete no-network example that uses a
+mock `ChatModel`.
+
 `runReportSuiteFileViaLLM` is the file-backed convenience wrapper. It loads a JSON
 suite file, prompt files, and a schema module, then delegates to `runReportSuiteViaLLM`.
 
